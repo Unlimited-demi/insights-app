@@ -65,19 +65,6 @@
           </select>
         </div>
 
-        <!-- Progress Bar -->
-        <div v-if="loading" class="p-4">
-          <div class="w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              class="bg-purple-500 h-2.5 rounded-full"
-              :style="{ width: progress + '%' }"
-            ></div>
-          </div>
-          <p class="mt-2 text-sm text-gray-600 text-center">
-            {{ progressMessage }}
-          </p>
-        </div>
-
         <!-- Submit Button -->
         <button
           class="w-full py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold hover:from-purple-600 hover:to-blue-600 transition-all duration-300"
@@ -113,28 +100,21 @@
               <p class="text-gray-700">{{ insights.target_variable }}</p>
             </div>
 
-            <!-- Recommendations Card -->
+            <!-- Recommended Features Card -->
             <div
-              class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300 col-span-1 md:col-span-2"
+              class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300"
             >
-              <h2 class="text-xl font-bold text-gray-800 mb-4">Recommendations</h2>
-              <div v-if="insights.model_insights.recommendations">
-                <div
-                  v-for="(recommendation, index) in insights.model_insights.recommendations"
-                  :key="index"
-                  class="mb-6 p-4 bg-gray-50 rounded-lg"
+              <h2 class="text-xl font-bold text-gray-800 mb-4">
+                Recommended Features
+              </h2>
+              <ul class="list-disc list-inside text-gray-700">
+                <li
+                  v-for="feature in insights.recommended_features"
+                  :key="feature"
                 >
-                  <h3 class="text-lg font-semibold text-purple-600 mb-2">
-                    {{ recommendation.area }}
-                  </h3>
-                  <p class="text-gray-700 mb-2">
-                    <strong>Action:</strong> {{ recommendation.action }}
-                  </p>
-                  <p class="text-gray-700">
-                    <strong>Recommendation:</strong> {{ recommendation.recommendation }}
-                  </p>
-                </div>
-              </div>
+                  {{ feature }}
+                </li>
+              </ul>
             </div>
 
             <!-- Top Features Card -->
@@ -173,6 +153,23 @@
                       :key="title"
                     >
                       <strong class="text-purple-600">{{ title }}:</strong>
+                      {{ text }}
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Display recommendations -->
+                <div v-if="insights.model_insights.recommendations">
+                  <h3 class="text-lg font-semibold text-gray-800 mb-2">
+                    Recommendations
+                  </h3>
+                  <ul class="space-y-2">
+                    <li
+                      v-for="(text, topic) in insights.model_insights
+                        .recommendations"
+                      :key="topic"
+                    >
+                      <strong class="text-purple-600">{{ topic }}:</strong>
                       {{ text }}
                     </li>
                   </ul>
@@ -262,6 +259,25 @@
                 </li>
               </ul>
             </div>
+
+            <!-- Evaluation Metrics Card -->
+            <div
+              class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300"
+            >
+              <!-- <h2 class="text-xl font-bold text-gray-800 mb-4">
+                Evaluation Metrics
+              </h2>
+              <p class="text-gray-700">
+                Silhouette Score:
+                {{ insights.evaluation_metrics.silhouette_score.toFixed(4) }}
+              </p>
+              <p class="text-gray-700">
+                Davies-Bouldin Index:
+                {{
+                  insights.evaluation_metrics.davies_bouldin_index.toFixed(4)
+                }}
+              </p> -->
+            </div>
           </template>
         </div>
       </transition>
@@ -271,14 +287,19 @@
 
 <script setup>
 import { ref } from "vue";
+import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+console.log("Environment Variables:", import.meta.env);
+
+// Use VITE_API_URL from .env
+const API_URL = import.meta.env.VUE_API_URL || "http://localhost:8080";
+console.log("API URL:", API_URL);
+
 const file = ref(null);
 const insights = ref(null);
 const loading = ref(false);
-const progress = ref(0);
-const progressMessage = ref("");
-const modelType = ref("gbm");
+const fileInput = ref(null);
+const modelType = ref("gbm"); // Default to GBM
 
 const handleFileDrop = (event) => {
   const droppedFile = event.dataTransfer.files[0];
@@ -298,49 +319,28 @@ const submitFile = async () => {
   }
 
   loading.value = true;
-  progress.value = 0;
-  progressMessage.value = "Starting processing...";
-  insights.value = null;
-
   const formData = new FormData();
   formData.append("file", file.value);
 
   try {
-    const eventSource = new EventSource(
-      `${API_URL}/stream-insights?model_type=${modelType.value}`
-    );
-
-    eventSource.onmessage = (event) => {
-      if (event.data.startsWith("data: ")) {
-        const data = event.data.replace("data: ", "").trim();
-        if (data.startsWith("{")) {
-          // Parse JSON insights
-          insights.value = JSON.parse(data);
-          loading.value = false;
-          eventSource.close();
-        } else {
-          // Update progress
-          progressMessage.value = data;
-          if (data.includes("step")) {
-            progress.value = (parseInt(data.match(/\d+/)[0]) / 5) * 100;
-          }
-        }
+    const endpoint =
+      modelType.value === "gbm" ? "/insights" : "/clustering-insights";
+    const response = await axios.post(
+      `${API_URL}/insights${endpoint}`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       }
-    };
-
-    eventSource.onerror = () => {
-      eventSource.close();
-      loading.value = false;
-      alert("Failed to stream insights. Please try again.");
-    };
+    );
+    console.log("Insights fetched successfully:", response.data);
+    insights.value = response.data;
   } catch (error) {
-    console.error("Error streaming insights:", error);
-    alert("Failed to stream insights. Please try again.");
+    console.error("Error fetching insights:", error);
+    alert("Failed to fetch insights. Please try again.");
+  } finally {
     loading.value = false;
   }
 };
 </script>
-
-<style>
-/* Add custom styles if needed */
-</style>
