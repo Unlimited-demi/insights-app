@@ -292,7 +292,7 @@ import axios from "axios";
 console.log("Environment Variables:", import.meta.env);
 
 // Use VITE_API_URL from .env
-const API_URL = import.meta.env.VUE_API_URL || "http://localhost:8080";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 console.log("API URL:", API_URL);
 
 const file = ref(null);
